@@ -33,7 +33,6 @@ print(f"Network: {G.number_of_nodes():,} nodes, {G.number_of_edges():,} edges")
 # STEP 4: CALCULATE IMPORTANCE METRICS
 print("\nCalculating importance metrics...")
 
-# Betweenness centrality
 betweenness = nx.betweenness_centrality(G, normalized=True)
 pagerank = nx.pagerank(G)
 in_degree = dict(G.in_degree())
@@ -62,21 +61,47 @@ results['importance'] = (
 # STEP 6: IDENTIFY TOP NODES
 top_20 = results.nlargest(20, 'importance')
 
+role_map = {
+    'askreddit': 'Universal Hub',
+    'iama': 'Celebrity Authority',
+    'subredditdrama': 'Drama Bridge',
+    'outoftheloop': 'Context Connector',
+    'writingprompts': 'Creative Hub',
+    'pics': 'Visual Authority',
+    'leagueoflegends': 'Gaming Bridge',
+    'videos': 'Media Gateway',
+    'gaming': 'Gaming Hub',
+    'mhoc': 'Political Sim Bridge',
+    'funny': 'General Hub',
+    'todayilearned': 'Knowledge Authority',
+    'explainlikeimfive': 'Explainer Hub',
+    'worldnews': 'News Authority',
+    'pcmasterrace': 'Tech Community Hub',
+    'legaladvice': 'Advice Authority',
+    'conspiracy': 'Fringe Bridge',
+    'bitcoin': 'Crypto Hub',
+    'news': 'News Gateway',
+    'games': 'Gaming Authority'
+}
+
+top_20 = top_20.copy()
+top_20['role'] = top_20['subreddit'].map(role_map).fillna('Community Hub')
+
+# Save results (after role column is assigned)
+results.to_csv('subreddit_importance_scores.csv', index=False)
+top_20.to_csv('top_20_subreddits.csv', index=False)
+print("\nResults saved to CSV files")
+
 print("\n" + "="*80)
 print("TOP 20 MOST IMPORTANT SUBREDDITS")
 print("="*80)
-print(f"{'Rank':<6}{'Subreddit':<25}{'Importance':<12}{'Betweenness':<15}{'PageRank':<12}{'In-Degree'}")
-print("-"*80)
+print(f"{'Rank':<6}{'Subreddit':<25}{'Importance':<12}{'Betweenness':<15}{'PageRank':<12}{'In-Degree':<12}{'Role'}")
+print("-"*95)
 
 for i, row in enumerate(top_20.itertuples(), 1):
-    print(f"{i:<6}{row.subreddit:<25}{row.importance:<12.2f}{row.betweenness:<15.6f}{row.pagerank:<12.6f}{row.in_degree}")
+    print(f"{i:<6}{row.subreddit:<25}{row.importance:<12.2f}{row.betweenness:<15.6f}{row.pagerank:<12.6f}{row.in_degree:<12}{row.role}")
 
-# STEP 7: SAVE RESULTS
-results.to_csv('subreddit_importance_scores.csv', index=False)
-top_20.to_csv('top_20_subreddits.csv', index=False)
-print("\n Results saved to CSV files")
-
-# STEP 8: VISUALIZATIONS
+# STEP 7: VISUALIZATIONS
 print("\nCreating visualizations...")
 
 # Figure 1: Bar charts comparing metrics
@@ -114,7 +139,7 @@ subgraph = G.subgraph(top_30_subs)
 plt.figure(figsize=(16, 16))
 pos = nx.spring_layout(subgraph, k=2, iterations=50, seed=42)
 
-node_sizes = [results[results['subreddit'] == node]['importance'].values[0] * 50 
+node_sizes = [results[results['subreddit'] == node]['importance'].values[0] * 50
               for node in subgraph.nodes()]
 
 nx.draw_networkx_nodes(subgraph, pos, node_size=node_sizes,
@@ -126,13 +151,13 @@ nx.draw_networkx_edges(subgraph, pos, edge_color='gray',
 
 nx.draw_networkx_labels(subgraph, pos, font_size=9, font_weight='bold')
 
-plt.title('Reddit Network: Top 30 Subreddits\n(Node size = Importance)', 
+plt.title('Reddit Network: Top 30 Subreddits\n(Node size = Importance)',
           fontsize=16, fontweight='bold')
 plt.axis('off')
 plt.savefig('network_visualization.png', dpi=300, bbox_inches='tight')
 print("Saved: network_visualization.png")
 
-# STEP 9: VALIDATION CHECKS
+# STEP 8: VALIDATION CHECKS
 print("\n" + "="*80)
 print("VALIDATION CHECKS")
 print("="*80)
