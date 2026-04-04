@@ -1,1 +1,200 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+from scipy.cluster.hierarchy import dendrogram, linkage
+import matplotlib.pyplot as plt
+import seaborn as sns
 
+df = pd.read_csv('analytic_data2024.csv', header=1)
+
+print(df.shape)        
+print(df.columns[:10])
+
+# Selecting and Renaming Features
+features = {
+    'v001_rawvalue': 'premature_death',
+    'v002_rawvalue': 'poor_fair_health',
+    'v042_rawvalue': 'poor_mental_days',
+    'v009_rawvalue': 'adult_smoking',
+    'v011_rawvalue': 'adult_obesity',
+    'v070_rawvalue': 'physical_inactivity',
+    'v085_rawvalue': 'uninsured',
+    'v004_rawvalue': 'pcp_ratio',
+    'v063_rawvalue': 'median_income',
+    'v023_rawvalue': 'unemployment'
+}
+
+df_sub = df[['state', 'county', 'fipscode', 'countycode'] + list(features.keys())].copy()
+df_sub = df_sub.rename(columns=features)
+
+feature_cols = list(features.values())
+
+# Filtering and Imputing
+df_counties = df_sub[df_sub['countycode'] != 0].copy()
+print(len(df_counties))  # 3,143 counties
+
+# Check missingness
+print(df_counties[feature_cols].isnull().sum())
+
+
+# Impute with column median
+for col in feature_cols:
+    df_counties[col] = df_counties[col].fillna(df_counties[col].median())
+
+print(f"Final dataset: {len(df_counties)} counties")
+
+#Features & Similarity Metric
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df_clean[feature_cols])
+
+#Step 1 — Dendrogram
+Z = linkage(X_scaled, method='ward')
+
+fig, ax = plt.subplots(figsize=(14, 5))
+dendrogram(
+    Z,
+    truncate_mode='lastp',  # Show only the last p merges for readability
+    p=30,
+    leaf_rotation=45,
+    leaf_font_size=9,
+    ax=ax,
+    color_threshold=22
+)
+ax.axhline(y=22, color='tomato', linestyle='--', linewidth=1.5, label='Cut → k=4')
+ax.set_title('Dendrogram — County Health Profiles (Ward Linkage, Last 30 Merges)')
+ax.set_ylabel('Merge Distance')
+ax.set_xlabel('County Clusters (n in parentheses)')
+ax.legend()
+plt.tight_layout()
+plt.savefig('dendrogram.png', dpi=150)
+plt.show()
+
+#Step 2 — Silhouette Scores
+silhouette_scores_list = []
+K_range = range(2, 9)
+
+for k in K_range:
+    model = AgglomerativeClustering(n_clusters=k, linkage='ward')
+    labels = model.fit_predict(X_scaled)
+    silhouette_scores_list.append(silhouette_score(X_scaled, labels))
+
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.plot(K_range, silhouette_scores_list, marker='o', color='steelblue')
+ax.axvline(x=4, color='tomato', linestyle='--', label='k=4')
+ax.set_xlabel('Number of Clusters (K)')
+ax.set_ylabel('Silhouette Score')
+ax.set_title('Silhouette Scores — Agglomerative Clustering')
+ax.legend()
+plt.tight_layout()
+plt.savefig('silhouette.png', dpi=150)
+plt.show()
+
+#Clustering
+model = AgglomerativeClustering(n_clusters=4, linkage='ward')
+df_counties['cluster'] = model.fit_predict(X_scaled)
+
+cluster_summary = df_counties.groupby('cluster')[feature_cols].mean().round(3)
+print(cluster_summary)
+
+for c in range(4):
+    sample = df_counties[df_counties['cluster'] == c][['county', 'state']].head(10)
+    print(f"\nCluster {c} sample counties:")
+    print(sample.to_string(index=False))
+
+#Visulizations
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components=2, random_state=42)
+X_pca = pca.fit_transform(X_scaled)
+df_counties['pc1'] = X_pca[:, 0]
+df_counties['pc2'] = X_pca[:, 1]
+
+cluster_labels = {
+    0: 'Thriving Metro',
+    1: 'Strained Suburban',
+    2: 'Rural Struggling',
+    3: 'High-Deprivation Isolated'
+}
+palette = {0: '#2196F3', 1: '#FF9800', 2: '#E53935', 3: '#6A0DAD'}
+
+fig, ax = plt.subplots(figsize=(10, 7))
+for c, label in cluster_labels.items():
+    mask = df_counties['cluster'] == c
+    ax.scatter(df_counties.loc[mask, 'pc1'], df_counties.loc[mask, 'pc2'],
+               label=label, alpha=0.5, s=12, color=palette[c])
+
+ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
+ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)")
+ax.set_title("U.S. County Health Clusters (PCA Projection)")
+ax.legend(markerscale=2)
+plt.tight_layout()
+plt.savefig('cluster_pca.png', dpi=150)
+plt.show()
+
+fig, ax = plt.subplots(figsize=(12, 4))
+sns.heatmap(
+    cluster_summary.rename(index=cluster_labels),
+    cmap='RdYlGn_r',
+    annot=True, fmt='.3f',
+    linewidths=0.4, ax=ax
+)
+ax.set_title('Cluster Centroids by Feature (Raw Means)')
+plt.tight_layout()
+plt.savefig('cluster_heatmap.png', dpi=150)
+plt.show()
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+from scipy.cluster.hierarchy import dendrogram, linkage
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+
+# Standardize
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df_counties[feature_cols])
+
+# Silhouette scores to confirm k
+silhouette_scores_list = []
+K_range = range(2, 9)
+for k in K_range:
+    model = AgglomerativeClustering(n_clusters=k, linkage='ward')
+    labels = model.fit_predict(X_scaled)
+    silhouette_scores_list.append(silhouette_score(X_scaled, labels))
+
+print("Silhouette scores:")
+for k, s in zip(K_range, silhouette_scores_list):
+    print(f"  k={k}: {s:.4f}")
+
+# Dendrogram
+Z = linkage(X_scaled, method='ward')
+fig, ax = plt.subplots(figsize=(14, 5))
+dendrogram(Z, truncate_mode='lastp', p=30, leaf_rotation=45, leaf_font_size=9, ax=ax, color_threshold=22)
+ax.axhline(y=22, color='tomato', linestyle='--', linewidth=1.5, label='Cut → k=4')
+ax.set_title('Dendrogram — County Health Profiles (Ward Linkage, Last 30 Merges)')
+ax.set_ylabel('Merge Distance')
+ax.legend()
+plt.tight_layout()
+plt.savefig('dendrogram.png', dpi=150)
+
+# Fit final model
+model = AgglomerativeClustering(n_clusters=4, linkage='ward')
+df_counties['cluster'] = model.fit_predict(X_scaled)
+
+# Cluster summary
+cluster_summary = df_counties.groupby('cluster')[feature_cols].mean().round(4)
+print("\nCluster means:")
+print(cluster_summary.to_string())
+
+# Cluster sizes
+print("\nCluster sizes:")
+print(df_counties['cluster'].value_counts().sort_index())
+
+# Sample counties per cluster
+for c in range(4):
+    sample = df_counties[df_counties['cluster'] == c][['county', 'state']].head(5)
+    print(f"\nCluster {c} samples:")
+    print(sample.to_string(index=False))
